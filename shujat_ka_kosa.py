@@ -1,15 +1,38 @@
 from pyamaze import maze, agent
 import numpy as np
+import time
+from os import system
+from functools import wraps
 
-COLS = 8
-pop_size = 500
 
-def randomPop(pop_size=10, end_point=1, start_point=COLS):
-    dir_bits = np.random.randint(2, size=(pop_size, 1))
-    pop = np.random.randint(1, COLS + 1, size=(pop_size, COLS - 2)) 
-    pop = np.insert(pop, 0, end_point, axis=1)                  
-    pop = np.insert(pop, COLS - 1, start_point, axis=1)          
-    pop = np.append(dir_bits, pop, axis=1)
+# >TODO: implement rectangular grid
+#TODO: implement orientation
+#TODO: optimize code
+#TODO: comment the whole code
+#TODO: factor the length in the slection
+#TODO: introduce elitism // should you??
+
+COLS = 5
+ROWS = 9
+pop_size = 1000
+
+def timeit(func):
+    @wraps(func)
+    def timeit_wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        print(f'Function {func.__name__} Took {total_time:.4f} seconds')
+        return result
+    return timeit_wrapper
+
+def generateRandomPopulation():
+    dir_bits = np.random.randint(2, size=(pop_size, 1))                 # random direction bits
+    pop = np.random.randint(1, ROWS, size=(pop_size, COLS - 2))     # random path (cols first)  
+    pop = np.insert(pop, 0, 1, axis=1)                          # initialize end point
+    pop = np.insert(pop, COLS - 1, ROWS, axis=1)                 # initialize start point
+    pop = np.append(dir_bits, pop, axis=1)                              # join dir bits and path
     # ort_bits = np.random.randint(2, size=(pop_size,1))          
     # pop = np.append(pop, ort_bits, axis=1)
     return pop
@@ -41,8 +64,10 @@ def coordsToDir(coords):
         map[coords[i]] = dir
     return map
 
+def getMap(chr):
+    return coordsToDir(chrToCoords(chr))
 
-def infSteps(path_map, maze_map):
+def infeasibleSteps(path_map, maze_map):
     inf_steps = 0
     for coord, dir in path_map.items():
         if maze_map[coord][dir] == 0:
@@ -50,14 +75,22 @@ def infSteps(path_map, maze_map):
     return inf_steps
 
 
-def fitness(path_map,maze_map):
-    return 999 - infSteps(path_map, maze_map)
+def getFitness(chr,maze_map):
+    path_map = getMap(chr)
+    return 99 - infeasibleSteps(path_map, maze_map)
 
-def calculate_fitness(pop, maze_map):
-    fitness_arr = np.empty(0, dtype=int)
-    for i in range(len(pop)):
-        fitness_arr = np.append(fitness_arr, fitness(coordsToDir(chrToCoords(pop[i])), maze_map))
+def getFitnessArr_s(pop, maze_map):
+    f = lambda i, j : getFitness(pop[int(i)], maze_map)
+    fitness_arr = np.fromfunction(f, shape=(pop_size, 1), dtype=np.int32)
     return fitness_arr
+def getFitnessArr_g(pop, maze_map):
+    return np.array([getFitness(pop[i], maze_map) for i in range(pop_size)])
+
+def getFitnessArr_r(pop, maze_map):
+    return np.fromiter([getFitness(pop[i], maze_map) for i in range(pop_size)] , dtype=np.int32)
+
+def getFitnessArr_z(pop, maze_map):
+    return [getFitness(pop[i], maze_map) for i in range(pop_size)]
 
 def parentSlection(pop, fitness_arr, num_parents=25):
     sum_fitness = np.sum(fitness_arr)
@@ -73,10 +106,10 @@ def parentSlection(pop, fitness_arr, num_parents=25):
         parents[i] = pop[j]
     return parents
 
-def crossover(pop, fitness_arr):
+def crossover(pop, fitness_arr, maze_map):
     parents = parentSlection(pop, fitness_arr)
     def offSpring():
-        cut_point = np.random.randint(1, COLS - 1)
+        cut_point = np.random.randint(2, COLS - 1)
         parent_one = parents[np.random.randint(len(parents))]
         parent_two = parents[np.random.randint(len(parents))]
         for i in range(0, cut_point):
@@ -89,36 +122,47 @@ def crossover(pop, fitness_arr):
         new_pop[i + 1] = off_springs[1]
     return new_pop
 
-def mutation(pop, mutation_rate = 0.5):
+def mutation(pop , mutation_rate = 0.5):
     for i in range(len(pop)):
         if np.random.random() < mutation_rate:
-            pop[i][np.random.randint(2, COLS)] = np.random.randint(1, COLS)
+            pop[i][np.random.randint(2, COLS)] = np.random.randint(1, ROWS)
         if np.random.random() < 0.1:
             pop[i][0] = 1 - pop[i][0]
     return pop
 
 def solve(maze_map):
-    pop = randomPop(500)
+    start_time = time.time()
+    pop = generateRandomPopulation()
     for gen in range(1000):
-        fitness_arr = calculate_fitness(pop, maze_map)
-        if max(fitness_arr) == 999:
-            print(gen)
+        system("cls")
+        print("time elapsed: %.4s seconds " % (time.time() - start_time))
+        fitness_arr = getFitnessArr_z(pop, maze_map)
+        if max(fitness_arr) == 99:
+            print(f"solution found in {gen} th generation")
+            print(pop[0])
             sol = list(fitness_arr)
             idx = sol.index(max(sol))
             return chrToCoords(pop[idx])
-        pop = crossover(pop, fitness_arr)
+        pop = crossover(pop, fitness_arr, maze_map)
         pop = mutation(pop)
 
 def main():
-    m = maze(COLS, COLS)
-    m.CreateMaze(loopPercent=30)
+    m = maze(ROWS, COLS)
+    m.CreateMaze(loopPercent=90)
     a = agent(m, footprints=True)
-
     path = solve(m.maze_map)
     m.tracePath({a:path})
     m.run()
 
-
+def test():
+    m = maze(ROWS, COLS)
+    m.CreateMaze()
+    gen = generateRandomPopulation()
+    arr_z = getFitnessArr_z(gen, m.maze_map)
+    arr_z.sort(reverse=True)
+    print(arr_z)
+#0.0098 -> smeksy method
 
 if __name__ == '__main__':
     main()
+    # test()
