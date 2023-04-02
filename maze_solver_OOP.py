@@ -80,3 +80,4 @@ class pathSolver:
             self.mutation()
         self.gen = self.sort_pop(self.gen)
         return self.geneToCoords(self.gen[0])
+
